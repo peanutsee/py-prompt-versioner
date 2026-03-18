@@ -1,0 +1,69 @@
+name: Release to PyPI
+
+on:
+  push:
+    branches:
+      - main
+
+# Required for OIDC trusted publishing (no API token needed)
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  # ── 1. Run the full test + coverage gate first ──────────────────────────
+  test:
+    name: Test Suite (pre-release gate)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run tests and enforce 80% coverage threshold
+        run: |
+          uv run pytest \
+            --cov=py_prompt_versioner \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v
+
+  # ── 2. Build & publish — only runs if tests pass ─────────────────────────
+  publish:
+    name: Build & Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: test  # blocked until the test job succeeds
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/py-prompt-versioner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build distribution (sdist + wheel)
+        run: uv build
+
+      - name: Publish to PyPI via Trusted Publishing (OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
